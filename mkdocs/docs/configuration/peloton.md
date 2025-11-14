@@ -33,9 +33,9 @@ The Peloton Settings provide settings related to how P2G should fetch workouts f
 
 | Field      | Required | Default | Description |
 |:-----------|:---------|:--------|:------------|
-| Email | **yes** | `null` | Your Peloton email used to sign in |
-| Password | **yes** | `null` | Your Peloton password used to sign in. **Note: Does not support `\` character in password** |
-| SessionId | **no** | `null` | Your Peloton sessionId [Read more...](#peloton-session-id) |
+| Email | **yes** | `null` | Your Peloton email (for identification only) |
+| Password | **yes** | `null` | Your Peloton password (for identification only) |
+| SessionId | **yes** | `null` | Your Peloton sessionId - **REQUIRED** for authentication [Read more...](#peloton-session-id) |
 | NumWorkoutsToDownload | no | 5 | The default number of workouts to download. See [choosing number of workouts to download](#choosing-number-of-workouts-to-download).  Set this to `0` if you would like P2G to prompt you each time for a number to download. |
 | ExcludeWorkoutTypes | no | none | An array of workout types that you do not want P2G to download/convert/upload. [Read more...](#exclude-workout-types) |
 
@@ -58,13 +58,43 @@ The list of valid values are any [Exercise Type](exercise-types.md).
 
 ## Peloton Session Id
 
-In the event P2G is not able to authenticate with Peloton, this configuration field can be used as a fallback option.
+!!! danger "Required as of November 2025"
+    **SessionId is required** - Peloton has deprecated their login API endpoint. Use SessionId for authentication.
 
-By visiting the website, and logging in, you can grab your `peloton_session_id` out of the saved cookie.
+### How to Get Your SessionId
 
-Saving the session id in the config file and restarting P2G will cause P2G to use that token for authentication, bypassing the need to "login".
+1. Visit https://www.onepeloton.com in your web browser
+2. Log in with your Peloton account
+3. Open your browser's developer tools (F12 or right-click > Inspect)
+4. Go to the **Application** tab (Chrome) or **Storage** tab (Firefox)
+5. Navigate to **Cookies** > `https://www.onepeloton.com`
+6. Find the cookie named `peloton_session_id`
+7. Copy the **Value** of this cookie
+8. Add it to your configuration file under `Peloton.SessionId`
 
-You will need to manually update this token every time it expires.  In order to stop using the token, simply delete `"SessionId": "..."` from your config file and restart P2G.
+### Alternative Method (Browser Extension)
+
+You can also use a browser extension like "Cookie Editor" to easily view and copy cookies.
+
+### Configuration
+
+Add the SessionId to your configuration:
+
+```json
+"Peloton": {
+    "Email": "peloton@gmail.com",
+    "Password": "peloton",
+    "SessionId": "your_session_id_here",
+    "NumWorkoutsToDownload": 1
+}
+```
+
+### Important Notes
+
+- **SessionId expires**: You will need to manually update this token periodically when it expires (typically every few weeks or months)
+- **Security**: SessionId is like a password and should never be shared
+- **GitHub Actions**: Set SessionId as a secret similar to how you configure Email and Password
+- **If SessionId expires**: Simply repeat the steps above to get a new SessionId and update your configuration
 
 !!! danger 
     SessionId is like a password and should never be shared.

@@ -21,6 +21,7 @@
   "Peloton": {
     "Email": "",
     "Password": "",
+    "SessionId": "",
     "NumWorkoutsToDownload": 1,
     "ExcludeWorkoutTypes": [ ]
   },

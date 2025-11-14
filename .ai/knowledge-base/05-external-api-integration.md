@@ -6,36 +6,39 @@ P2G integrates with two primary external APIs: Peloton API for workout data retr
 ## Peloton API Integration
 
 ### Authentication
-- **Method**: Session-based authentication
+- **Method**: Session-based authentication using SessionId
 - **Base URL**: `https://api.onepeloton.com/api`
-- **Auth URL**: `https://api.onepeloton.com/auth/login`
+- **Auth URL**: `https://api.onepeloton.com/auth/login` (DEPRECATED as of November 2025 - use SessionId instead)
 
 ### Authentication Flow
-1. **Initial Login**:
-   ```http
-   POST /auth/login
-   Content-Type: application/json
+
+#### Current Method (Required)
+1. **User manually obtains SessionId**:
+   - Visit https://www.onepeloton.com and log in
+   - Extract `peloton_session_id` cookie from browser developer tools
+   - Add SessionId to configuration file under `Peloton.SessionId`
+
+2. **P2G uses SessionId directly**:
+   ```csharp
+   // If SessionId is provided in config, use it directly
+   var auth = new PelotonApiAuthentication()
+   {
+       SessionId = settings.Peloton.SessionId
+   };
    
-   {
-     "username_or_email": "user@example.com",
-     "password": "password123"
-   }
+   // Validate session by fetching user data
+   var userData = await GetUserDataAsync(auth.SessionId);
+   auth.UserId = userData.Id;
    ```
 
-2. **Response**:
-   ```json
-   {
-     "session_id": "abc123...",
-     "user_id": "user123",
-     "user_data": { ... }
-   }
-   ```
-
-3. **Subsequent Requests**:
+3. **API Requests**:
    ```http
    GET /api/user/{user_id}/workouts
    Cookie: peloton_session_id=abc123...
    ```
+
+#### Deprecated Method
+The `/auth/login` endpoint is deprecated (returns 403 Forbidden). Use SessionId authentication instead.
 
 ### Key Endpoints
 
@@ -127,24 +130,44 @@ GET /api/ride/{ride_id}/details
 
 ### Error Handling
 - **401 Unauthorized**: Invalid credentials or expired session
-- **403 Forbidden**: Account locked or suspended
+- **403 Forbidden**: 
+  - Login endpoint deprecated (use SessionId instead)
+  - Account locked or suspended
+  - Invalid SessionId
 - **404 Not Found**: Workout or user not found
 - **429 Too Many Requests**: Rate limit exceeded
 - **500 Internal Server Error**: Peloton API issues
 
+### SessionId Management
+- **Expiration**: SessionIds expire periodically (typically every few weeks or months)
+- **Renewal**: Users must manually extract a new SessionId when the current one expires
+- **Security**: SessionId is equivalent to a password and should be treated as sensitive data
+- **Configuration**: Set in `Peloton.SessionId` in configuration file
+
 ### Implementation Notes
 ```csharp
-// Authentication example
-var response = await $"{AuthBaseUrl}"
-    .WithHeader("Accept-Language", "en-US")
-    .WithHeader("User-Agent", "PostmanRuntime/7.26.20")
-    .WithTimeout(30)
-    .PostJsonAsync(new AuthRequest()
+// Authentication example (using SessionId from config)
+if (!string.IsNullOrWhiteSpace(settings.Peloton.SessionId))
+{
+    var auth = new PelotonApiAuthentication()
     {
-        username_or_email = email,
-        password = password
-    })
-    .ReceiveJson<AuthResponse>();
+        SessionId = settings.Peloton.SessionId
+    };
+    
+    // Validate session by fetching user data
+    var userData = await GetUserDataAsync(auth.SessionId);
+    auth.UserId = userData.Id;
+}
+
+// Error handling for deprecated login endpoint
+catch (FlurlHttpException fe) when (fe.StatusCode == (int)HttpStatusCode.Forbidden)
+{
+    // Peloton has deprecated the login endpoint
+    // User must use SessionId instead
+    throw new PelotonAuthenticationError(
+        "Peloton has deprecated the login endpoint. You must use SessionId for authentication.", 
+        fe);
+}
 
 // API request example
 var workouts = await $"{BaseUrl}/user/{userId}/workouts"

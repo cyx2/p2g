@@ -43,8 +43,7 @@ namespace Peloton
 		{
 			var settings = await _settingsService.GetSettingsAsync();
 
-			settings.Peloton.EnsurePelotonCredentialsAreProvided();
-
+			// Check for SessionId first (now required since login endpoint is deprecated)
 			if (!string.IsNullOrWhiteSpace(settings.Peloton.SessionId))
             {
 				var userProvidedAuth = new PelotonApiAuthentication()
@@ -56,6 +55,13 @@ namespace Peloton
 				userProvidedAuth.UserId = userData.Id;
 				return userProvidedAuth;
             }
+
+			// SessionId is required - Peloton has deprecated the login endpoint
+			// Validate credentials to provide helpful error message
+			settings.Peloton.EnsurePelotonCredentialsAreProvided();
+			
+			// Even with Email/Password, we can't authenticate via the deprecated endpoint
+			// This will attempt login and throw a 403 error with helpful message
 
 			var auth = _settingsService.GetPelotonApiAuthentication(settings.Peloton.Email);
 			if (auth is object && auth.IsValid(settings))
@@ -83,6 +89,16 @@ namespace Peloton
 
 				_settingsService.SetPelotonApiAuthentication(auth);
 				return auth;
+			}
+			catch (FlurlHttpException fe) when (fe.StatusCode == (int)HttpStatusCode.Forbidden)
+			{
+				_logger.Error(fe, $"Peloton login endpoint is no longer accepting requests (403 Forbidden).");
+				_settingsService.ClearPelotonApiAuthentication(auth.Email);
+				var errorMessage = "Peloton has deprecated the login endpoint. You must use SessionId for authentication. " +
+					"Please visit https://www.onepeloton.com, log in, and extract the 'peloton_session_id' cookie value. " +
+					"Then add it to your configuration file under 'Peloton.SessionId'. " +
+					"See the documentation for more details: https://github.com/philosowaffle/peloton-to-garmin/blob/master/mkdocs/docs/configuration/peloton.md#peloton-session-id";
+				throw new PelotonAuthenticationError(errorMessage, fe);
 			}
 			catch (FlurlHttpException fe) when (fe.StatusCode == (int)HttpStatusCode.Unauthorized)
 			{
